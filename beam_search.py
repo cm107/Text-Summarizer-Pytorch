@@ -45,6 +45,7 @@ class Beam(object):
         best_scores, best_scores_id = T.topk(input=scores, k=config.beam_size, dim=0)   #will be sorted in descending order of scores
         self.scores = best_scores                                       #(beam,1); sorted
         beams_order = best_scores_id.squeeze(1)/n_extended_vocab        #(beam,); sorted
+        beams_order = beams_order.long()
         best_words = best_scores_id%n_extended_vocab                    #(beam,1); sorted
         self.hid_h = h[beams_order]                                     #(beam, n_hid); sorted
         self.hid_c = c[beams_order]                                     #(beam, n_hid); sorted

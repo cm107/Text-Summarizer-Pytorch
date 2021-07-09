@@ -55,9 +55,13 @@ class Evaluate(object):
         ref_sents = []
         article_sents = []
         rouge = Rouge()
+        num_batches = self.batcher._batch_queue.qsize()
+        from tqdm import tqdm
+        pbar = tqdm(total=num_batches, unit='batches', leave=False)
+        loop_count = 0
         while batch is not None:
+            loop_count += 1
             enc_batch, enc_lens, enc_padding_mask, enc_batch_extend_vocab, extra_zeros, ct_e = get_enc_data(batch)
-
             with T.autograd.no_grad():
                 enc_batch = self.model.embeds(enc_batch)
                 enc_out, enc_hidden = self.model.encoder(enc_batch, enc_lens)
@@ -65,7 +69,6 @@ class Evaluate(object):
             #-----------------------Summarization----------------------------------------------------
             with T.autograd.no_grad():
                 pred_ids = beam_search(enc_hidden, enc_out, enc_padding_mask, ct_e, extra_zeros, enc_batch_extend_vocab, self.model, start_id, end_id, unk_id)
-
             for i in range(len(pred_ids)):
                 decoded_words = data.outputids2words(pred_ids[i], self.vocab, batch.art_oovs[i])
                 if len(decoded_words) < 2:
@@ -77,21 +80,19 @@ class Evaluate(object):
                 article = batch.original_articles[i]
                 ref_sents.append(abstract)
                 article_sents.append(article)
-
             batch = self.batcher.next_batch()
+            pbar.update()
+        pbar.close()
 
         load_file = self.opt.load_model
-
         if print_sents:
             self.print_original_predicted(decoded_sents, ref_sents, article_sents, load_file)
-
         scores = rouge.get_scores(decoded_sents, ref_sents, avg = True)
         if self.opt.task == "test":
             print(load_file, "scores:", scores)
         else:
             rouge_l = scores["rouge-l"]["f"]
             print(load_file, "rouge_l:", "%.4f" % rouge_l)
-
 
 
 if __name__ == "__main__":

@@ -192,9 +192,11 @@ class Batcher(object):
     # If the batch queue is empty, print a warning
     if self._batch_queue.qsize() == 0:
       # tf.logging.warning('Bucket input queue is empty when calling next_batch. Bucket queue size: %i, Input queue size: %i', self._batch_queue.qsize(), self._example_queue.qsize())
-      if self._single_pass and self._finished_reading:
-        tf.logging.info("Finished reading dataset in single_pass mode.")
-        return None
+      # print(f"self._single_pass:\n{self._single_pass}")
+      # print(f"self._finished_reading:\n{self._finished_reading}")
+      # if self._single_pass and self._finished_reading:
+      #   tf.logging.info("Finished reading dataset in single_pass mode.")
+      return None
 
     batch = self._batch_queue.get() # get the next Batch
     return batch
