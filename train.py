@@ -2,6 +2,7 @@ import os
 os.environ["CUDA_VISIBLE_DEVICES"] = "0"    #Set cuda device
 
 import time
+from tqdm import tqdm
 
 import torch as T
 import torch.nn as nn
@@ -232,6 +233,8 @@ class Train(object):
     def trainIters(self):
         iter = self.setup_train()
         count = mle_total = r_total = 0
+        pbar = tqdm(total=config.max_iterations, unit='iter', leave=True)
+        pbar.set_description('Training')
         while iter <= config.max_iterations:
             batch = self.batcher.next_batch()
             try:
@@ -253,6 +256,8 @@ class Train(object):
 
             if iter % 5000 == 0:
                 self.save_model(iter)
+            pbar.update()
+        pbar.close()
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()

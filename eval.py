@@ -21,12 +21,13 @@ def get_cuda(tensor):
     return tensor
 
 class Evaluate(object):
-    def __init__(self, data_path, opt, batch_size = config.batch_size):
+    def __init__(self, data_path, opt, batch_size = config.batch_size, eval_dump_save: str='eval.txt'):
         self.vocab = Vocab(config.vocab_path, config.vocab_size)
         self.batcher = Batcher(data_path, self.vocab, mode='eval',
                                batch_size=batch_size, single_pass=True)
         self.opt = opt
         time.sleep(5)
+        self.eval_dump_save = eval_dump_save
 
     def setup_valid(self):
         self.model = Model()
@@ -44,7 +45,12 @@ class Evaluate(object):
                 f.write("ref: " + ref_sents[i] + "\n")
                 f.write("dec: " + decoded_sents[i] + "\n\n")
 
-    def evaluate_batch(self, print_sents = False):
+    def write_eval_dump(self, text: str, append: bool=False):
+        f = open(self.eval_dump_save, 'a' if append else 'w')
+        f.write(f'\n{text}' if append else text)
+        f.close()
+
+    def evaluate_batch(self, print_sents = False, first: bool=True, max_batches: int=None):
 
         self.setup_valid()
         batch = self.batcher.next_batch()
@@ -57,9 +63,10 @@ class Evaluate(object):
         rouge = Rouge()
         num_batches = self.batcher._batch_queue.qsize()
         from tqdm import tqdm
-        pbar = tqdm(total=num_batches, unit='batches', leave=False)
+        max_batches = num_batches if max_batches is None else max_batches
+        pbar = tqdm(total=min(num_batches, max_batches), unit='batches', leave=False)
         loop_count = 0
-        while batch is not None:
+        while batch is not None and loop_count < max_batches:
             loop_count += 1
             enc_batch, enc_lens, enc_padding_mask, enc_batch_extend_vocab, extra_zeros, ct_e = get_enc_data(batch)
             with T.autograd.no_grad():
@@ -89,10 +96,15 @@ class Evaluate(object):
             self.print_original_predicted(decoded_sents, ref_sents, article_sents, load_file)
         scores = rouge.get_scores(decoded_sents, ref_sents, avg = True)
         if self.opt.task == "test":
-            print(load_file, "scores:", scores)
+            text = f'{load_file} scores: {scores}'
+            print(text)
+            self.write_eval_dump(text=text, append=not first)
         else:
             rouge_l = scores["rouge-l"]["f"]
-            print(load_file, "rouge_l:", "%.4f" % rouge_l)
+            rouge_l_text = "%.4f" % rouge_l
+            text = f'{load_file} rouge_l: {rouge_l_text}'
+            print(text)
+            self.write_eval_dump(text=text, append=not first)
 
 
 if __name__ == "__main__":
@@ -101,16 +113,19 @@ if __name__ == "__main__":
     parser.add_argument("--start_from", type=str, default="0020000.tar")
     parser.add_argument("--load_model", type=str, default=None)
     opt = parser.parse_args()
+    max_batches = 10 # Evaluation takes too long unless I reduce the number of batches like this.
 
     if opt.task == "validate":
         saved_models = os.listdir(config.save_model_path)
         saved_models.sort()
         file_idx = saved_models.index(opt.start_from)
         saved_models = saved_models[file_idx:]
+        first = True
         for f in saved_models:
             opt.load_model = f
             eval_processor = Evaluate(config.valid_data_path, opt)
-            eval_processor.evaluate_batch()
+            eval_processor.evaluate_batch(first=first, max_batches=max_batches)
+            first = False
     else:   #test
-        eval_processor = Evaluate(config.test_data_path, opt)
-        eval_processor.evaluate_batch()
+        eval_processor = Evaluate(config.test_data_path, opt, max_batches=max_batches)
+        eval_processor.evaluate_batch(first=True)
